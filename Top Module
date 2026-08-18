@@ -1,0 +1,296 @@
+module riscv_cpu (
+    input wire clk,
+    input wire reset
+);
+
+    // =========================================================
+    // 1. PC
+    // =========================================================
+
+    wire [31:0] pc;
+    wire [31:0] next_pc;
+
+
+    // =========================================================
+    // 2. Instruction Memory
+    // =========================================================
+
+    wire [31:0] instruction;
+
+
+    // =========================================================
+    // 3. Instruction Decoder outputs
+    // =========================================================
+
+    wire [6:0] opcode;
+    wire [4:0] rd;
+    wire [4:0] rs1;
+    wire [4:0] rs2;
+    wire [2:0] funct3;
+    wire [6:0] funct7;
+
+    wire [2:0] instr_type;
+    wire [31:0] immediate;
+
+
+    // =========================================================
+    // 4. Control Unit outputs
+    // =========================================================
+
+    wire reg_write;
+    wire alu_src;
+    wire mem_read;
+    wire mem_write;
+    wire mem_to_reg;
+    wire branch;
+    wire jump;
+    wire jalr;
+    wire [1:0] alu_op;
+
+
+    // =========================================================
+    // 5. Register File
+    // =========================================================
+
+    wire [31:0] read_data1;
+    wire [31:0] read_data2;
+
+    wire [31:0] write_data;
+
+
+    // =========================================================
+    // 6. ALU Control
+    // =========================================================
+
+    wire [3:0] alu_control;
+
+
+    // =========================================================
+    // 7. ALU
+    // =========================================================
+
+    wire [31:0] alu_input_b;
+    wire [31:0] alu_result;
+    wire alu_zero;
+
+
+    // =========================================================
+    // 8. Data Memory
+    // =========================================================
+
+    wire [31:0] memory_data;
+
+
+    // =========================================================
+    // 9. Branch logic
+    // =========================================================
+
+    wire branch_taken;
+
+
+    // =========================================================
+    // PC + 4
+    // Needed by JAL/JALR
+    // =========================================================
+
+    wire [31:0] pc_plus_4;
+
+    assign pc_plus_4 = pc + 32'd4;
+
+
+    // =========================================================
+    // 10. Select second ALU input
+    // =========================================================
+
+    assign alu_input_b = alu_src ? immediate : read_data2;
+
+
+    // =========================================================
+    // 11. Branch condition
+    // =========================================================
+
+    assign branch_taken =
+        branch &&
+        (
+            (funct3 == 3'b000 && alu_zero)  ||   // BEQ
+            (funct3 == 3'b001 && !alu_zero)      // BNE
+        );
+
+
+    // =========================================================
+    // 12. Write-back selection
+    //
+    // Normal instructions:
+    //     ADD  -> ALU result
+    //     ADDI -> ALU result
+    //
+    // LW:
+    //     Memory data
+    //
+    // JAL/JALR:
+    //     PC + 4
+    // =========================================================
+
+    reg [31:0] final_write_data;
+
+    always @(*) begin
+
+        if (jump) begin
+            final_write_data = pc_plus_4;
+        end
+
+        else if (mem_to_reg) begin
+            final_write_data = memory_data;
+        end
+
+        else begin
+            final_write_data = alu_result;
+        end
+
+    end
+
+
+    // =========================================================
+    // 13. Program Counter
+    // =========================================================
+
+    program_counter PC_UNIT (
+        .clk(clk),
+        .reset(reset),
+        .next_pc(next_pc),
+        .pc(pc)
+    );
+
+
+    // =========================================================
+    // 14. Instruction Memory
+    // =========================================================
+
+    instruction_memory IMEM (
+        .address(pc),
+        .instruction(instruction)
+    );
+
+
+    // =========================================================
+    // 15. Instruction Decoder
+    // =========================================================
+
+    instruction_decoder DECODER (
+        .instruction(instruction),
+
+        .opcode(opcode),
+        .rd(rd),
+        .rs1(rs1),
+        .rs2(rs2),
+        .funct3(funct3),
+        .funct7(funct7),
+
+        .instr_type(instr_type),
+        .immediate(immediate)
+    );
+
+
+    // =========================================================
+    // 16. Control Unit
+    // =========================================================
+
+    control_unit CONTROL (
+        .opcode(opcode),
+
+        .reg_write(reg_write),
+        .alu_src(alu_src),
+        .mem_read(mem_read),
+        .mem_write(mem_write),
+        .mem_to_reg(mem_to_reg),
+        .branch(branch),
+        .jump(jump),
+        .jalr(jalr),
+        .alu_op(alu_op)
+    );
+
+
+    // =========================================================
+    // 17. Register File
+    // =========================================================
+
+    register_file REGFILE (
+        .clk(clk),
+        .reset(reset),
+
+        .rs1(rs1),
+        .rs2(rs2),
+        .rd(rd),
+
+        .write_data(final_write_data),
+        .reg_write(reg_write),
+
+        .read_data1(read_data1),
+        .read_data2(read_data2)
+    );
+
+
+    // =========================================================
+    // 18. ALU Control
+    // =========================================================
+
+    alu_control ALU_CONTROL (
+        .alu_op(alu_op),
+        .funct3(funct3),
+        .funct7(funct7),
+
+        .alu_control(alu_control)
+    );
+
+
+    // =========================================================
+    // 19. ALU
+    // =========================================================
+
+    alu ALU (
+        .a(read_data1),
+        .b(alu_input_b),
+
+        .alu_control(alu_control),
+
+        .result(alu_result),
+        .zero(alu_zero)
+    );
+
+
+    // =========================================================
+    // 20. Data Memory
+    // =========================================================
+
+    data_memory DMEM (
+        .clk(clk),
+
+        .mem_read(mem_read),
+        .mem_write(mem_write),
+
+        .address(alu_result),
+        .write_data(read_data2),
+
+        .read_data(memory_data)
+    );
+
+
+    // =========================================================
+    // 21. Next PC Logic
+    // =========================================================
+
+    next_pc_logic NEXT_PC (
+        .pc(pc),
+        .immediate(immediate),
+        .rs1_data(read_data1),
+
+        .branch(branch),
+        .branch_taken(branch_taken),
+
+        .jump(jump),
+        .jalr(jalr),
+
+        .next_pc(next_pc)
+    );
+
+endmodule
