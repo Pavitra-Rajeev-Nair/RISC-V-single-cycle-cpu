@@ -1,0 +1,51 @@
+module write_back_mux (
+    input  wire [31:0] alu_result,
+    input  wire [31:0] memory_data,
+    input  wire        mem_to_reg,
+
+    output wire [31:0] write_data
+);
+
+    assign write_data = mem_to_reg ? memory_data : alu_result;
+
+endmodule
+
+//next pc logic
+
+module next_pc_logic (
+    input  wire [31:0] pc,
+    input  wire [31:0] immediate,
+    input  wire [31:0] rs1_data,
+
+    input  wire        branch,
+    input  wire        branch_taken,
+    input  wire        jump,
+    input  wire        jalr,
+
+    output reg  [31:0] next_pc
+);
+
+    always @(*) begin
+
+        // Default: go to next instruction
+        next_pc = pc + 32'd4;
+
+        // Branch
+        if (branch && branch_taken) begin
+            next_pc = pc + immediate;
+        end
+
+        // JAL
+        if (jump && !jalr) begin
+            next_pc = pc + immediate;
+        end
+
+        // JALR
+        if (jump && jalr) begin
+            next_pc = rs1_data + immediate;
+            next_pc[0] = 1'b0;
+        end
+
+    end
+
+endmodule
