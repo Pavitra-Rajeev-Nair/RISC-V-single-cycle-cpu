@@ -1,0 +1,204 @@
+module alu_control (
+    input  wire [1:0] alu_op,
+    input  wire [2:0] funct3,
+    input  wire [6:0] funct7,
+
+    output reg [3:0] alu_control
+);
+
+    // ALU operation codes
+    localparam ALU_ADD = 4'b0000;
+    localparam ALU_SUB = 4'b0001;
+    localparam ALU_AND = 4'b0010;
+    localparam ALU_OR  = 4'b0011;
+    localparam ALU_XOR = 4'b0100;
+    localparam ALU_SLT = 4'b0101;
+
+
+    always @(*) begin
+
+        // Default
+        alu_control = ALU_ADD;
+
+        case (alu_op)
+
+            // --------------------------------
+            // R-TYPE
+            // ADD, SUB, AND, OR, XOR, SLT
+            // --------------------------------
+
+            2'b00: begin
+
+                case (funct3)
+
+                    3'b000: begin
+                        if (funct7 == 7'b0100000)
+                            alu_control = ALU_SUB;
+                        else
+                            alu_control = ALU_ADD;
+                    end
+
+                    3'b111: begin
+                        alu_control = ALU_AND;
+                    end
+
+                    3'b110: begin
+                        alu_control = ALU_OR;
+                    end
+
+                    3'b100: begin
+                        alu_control = ALU_XOR;
+                    end
+
+                    3'b010: begin
+                        alu_control = ALU_SLT;
+                    end
+
+                    default: begin
+                        alu_control = ALU_ADD;
+                    end
+
+                endcase
+
+            end
+
+
+            // --------------------------------
+            // I-TYPE ALU
+            // ADDI, ANDI, ORI, XORI, SLTI
+            // --------------------------------
+
+            2'b01: begin
+
+                case (funct3)
+
+                    3'b000: begin
+                        alu_control = ALU_ADD;   // ADDI
+                    end
+
+                    3'b111: begin
+                        alu_control = ALU_AND;   // ANDI
+                    end
+
+                    3'b110: begin
+                        alu_control = ALU_OR;    // ORI
+                    end
+
+                    3'b100: begin
+                        alu_control = ALU_XOR;   // XORI
+                    end
+
+                    3'b010: begin
+                        alu_control = ALU_SLT;   // SLTI
+                    end
+
+                    default: begin
+                        alu_control = ALU_ADD;
+                    end
+
+                endcase
+
+            end
+
+
+            // --------------------------------
+            // BRANCH
+            // BEQ / BNE
+            // --------------------------------
+
+            2'b10: begin
+
+                // Subtraction is used to compare
+                // the two registers.
+
+                alu_control = ALU_SUB;
+
+            end
+
+
+            // --------------------------------
+            // LOAD / STORE
+            // LW / SW
+            // --------------------------------
+
+            2'b11: begin
+
+                // Address = rs1 + immediate
+
+                alu_control = ALU_ADD;
+
+            end
+
+
+            default: begin
+                alu_control = ALU_ADD;
+            end
+
+        endcase
+
+    end
+
+endmodule
+
+//alu
+
+module alu (
+    input  wire [31:0] a,
+    input  wire [31:0] b,
+
+    input  wire [3:0] alu_control,
+
+    output reg  [31:0] result,
+    output wire        zero
+);
+
+    // ALU operation codes
+
+    localparam ALU_ADD = 4'b0000;
+    localparam ALU_SUB = 4'b0001;
+    localparam ALU_AND = 4'b0010;
+    localparam ALU_OR  = 4'b0011;
+    localparam ALU_XOR = 4'b0100;
+    localparam ALU_SLT = 4'b0101;
+
+
+    always @(*) begin
+
+        case (alu_control)
+
+            // Addition
+            ALU_ADD:
+                result = a + b;
+
+            // Subtraction
+            ALU_SUB:
+                result = a - b;
+
+            // AND
+            ALU_AND:
+                result = a & b;
+
+            // OR
+            ALU_OR:
+                result = a | b;
+
+            // XOR
+            ALU_XOR:
+                result = a ^ b;
+
+            // Set Less Than
+            ALU_SLT:
+                result = ($signed(a) < $signed(b)) ? 32'd1 : 32'd0;
+
+            default:
+                result = 32'b0;
+
+        endcase
+
+    end
+
+
+    // Used mainly for BEQ
+    assign zero = (result == 32'b0);
+
+endmodule
