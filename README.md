@@ -1,2 +1,2 @@
-# RISC-V-single-cycle-cpu
-Single-cycle RISC-V CPU implemented in Verilog
+# RISC-V-single-stage-cpu
+Single-stage RISC-V CPU implemented in Verilog
